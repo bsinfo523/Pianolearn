@@ -1129,6 +1129,7 @@ class Pitch {
         throw new Error('getUserMedia nicht verfügbar');
 
       this.actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (this.actx.state === 'suspended') await this.actx.resume();
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false },
         video: false
@@ -1264,6 +1265,11 @@ class Pitch {
 
   _go() {
     if (!this.active) return;
+    // iOS Safari kann AudioContext suspenden – bei Bedarf neu starten
+    if (this.actx.state === 'suspended') {
+      this.actx.resume().then(() => requestAnimationFrame(() => this._go()));
+      return;
+    }
     this.anT.getFloatTimeDomainData(this.tbuf);
 
     let rms = 0;
