@@ -287,6 +287,17 @@ input[type=range]::-webkit-slider-thumb {
 </style>
 </head>
 <body>
+<div id="_dbg" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#0f0;font:11px monospace;padding:6px;z-index:9999;max-height:40vh;overflow-y:auto">SEITE GELADEN...<br></div>
+<script>
+function dbg(msg) {
+  const el = document.getElementById('_dbg');
+  if (el) { el.innerHTML += msg + '<br>'; el.scrollTop = el.scrollHeight; }
+}
+window.onerror = function(msg, src, line, col, err) {
+  dbg('JS-FEHLER: ' + msg + ' (Zeile ' + line + ')');
+};
+dbg('Script-Block 1 OK');
+</script>
 
 <header>
   <div class="logo">🎹 PianoLearn</div>
@@ -1125,15 +1136,22 @@ async function importMidi(input){
 class Pitch {
   async start() {
     try {
+      dbg('start() aufgerufen');
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
         throw new Error('getUserMedia nicht verfügbar');
 
       this.actx = new (window.AudioContext || window.webkitAudioContext)();
-      if (this.actx.state === 'suspended') await this.actx.resume();
+      dbg('AudioContext state: ' + this.actx.state + ' sampleRate: ' + this.actx.sampleRate);
+      if (this.actx.state === 'suspended') {
+        dbg('resuming...');
+        await this.actx.resume();
+        dbg('nach resume: ' + this.actx.state);
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false },
         video: false
       });
+      dbg('Stream OK, tracks: ' + stream.getAudioTracks().length);
       const src = this.actx.createMediaStreamSource(stream);
 
       this.anT = this.actx.createAnalyser();
@@ -1160,9 +1178,11 @@ class Pitch {
       this._lastNoteMs = 0;
 
       this.active = true;
+      dbg('Pitch-Detection gestartet, aktiv: ' + this.active);
       this._go();
       return true;
     } catch(e) {
+      dbg('FEHLER: ' + e.name + ': ' + e.message);
       console.warn('Mikrofon:', e.name, e.message);
       return false;
     }
@@ -1280,6 +1300,7 @@ class Pitch {
     const now = Date.now();
 
     if (rms > 0.02) {
+      dbg('RMS: ' + rms.toFixed(4));
       const { freq, confidence } = this._mpm(this.tbuf, this.actx.sampleRate);
 
       if (freq > 27.5 && freq < 4200 && confidence > 0.45) {
