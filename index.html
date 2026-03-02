@@ -287,16 +287,14 @@ input[type=range]::-webkit-slider-thumb {
 </style>
 </head>
 <body>
-<div id="_dbg" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#0f0;font:11px monospace;padding:6px;z-index:9999;max-height:40vh;overflow-y:auto">SEITE GELADEN...<br></div>
 <script>
 function dbg(msg) {
   const el = document.getElementById('_dbg');
-  if (el) { el.innerHTML += msg + '<br>'; el.scrollTop = el.scrollHeight; }
+  if (el && el.style.display !== 'none') { el.innerHTML += msg + '<br>'; el.scrollTop = el.scrollHeight; }
 }
 window.onerror = function(msg, src, line, col, err) {
   dbg('JS-FEHLER: ' + msg + ' (Zeile ' + line + ')');
 };
-dbg('Script-Block 1 OK');
 </script>
 
 <header>
@@ -338,6 +336,14 @@ dbg('Script-Block 1 OK');
   <button class="btn btn-ghost" style="border-radius:8px;padding:5px 11px;font-size:0.77rem" id="wait-btn" onclick="toggleWait()">⏸ Warten: AN</button>
   <div class="ctrl-sep"></div>
   <button class="btn btn-ghost" style="border-radius:8px;padding:5px 11px;font-size:0.77rem" id="label-btn" onclick="toggleLabels()">🎵 Noten-Namen: AN</button>
+  <div class="ctrl-sep"></div>
+  <div class="ctrl-grp">
+    <span class="ctrl-lbl">🎤</span>
+    <input type="range" id="gain-sl" min="1" max="20" value="4" step="1" oninput="setGain(this.value)">
+    <span class="ctrl-val" id="gain-val">4x</span>
+  </div>
+  <div class="ctrl-sep"></div>
+  <button class="btn btn-ghost" style="border-radius:8px;padding:5px 11px;font-size:0.77rem" onclick="toggleDebug()">🐛 Debug</button>
 </div>
 
 <div id="piano-wrap">
@@ -1350,6 +1356,22 @@ class Pitch {
 // ════════════════════════════════════════
 // MIDI KEYBOARD (Web MIDI API)
 // ════════════════════════════════════════
+function setGain(v) {
+  document.getElementById('gain-val').textContent = v + 'x';
+  if (pitch && pitch.gainNode) pitch.gainNode.gain.value = parseFloat(v);
+}
+
+function toggleDebug() {
+  const el = document.getElementById('_dbg');
+  if (!el) return;
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    el.innerHTML = 'Debug aktiv – RMS-Werte und Diagnose:<br>';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 async function initMidi(){
   if(!navigator.requestMIDIAccess){
     showInfoModal('MIDI nicht verfügbar','Dein Browser unterstützt kein Web MIDI. Verwende Chrome auf Desktop oder ein USB-MIDI-Keyboard.');
@@ -1462,5 +1484,6 @@ function showMicHelp(){
 
 openModal();
 </script>
+<div id="_dbg" style="display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.88);color:#0f0;font:11px monospace;padding:6px 8px;z-index:9999;max-height:35vh;overflow-y:auto"></div>
 </body>
 </html>
