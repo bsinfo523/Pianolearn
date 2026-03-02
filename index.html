@@ -1269,7 +1269,7 @@ class Pitch {
     this._rmsHist[this._rmsI % 6] = rms;
     this._rmsI++;
     const old = this._rmsHist[(this._rmsI + 6 - 4) % 6];
-    if (rms / (old + 0.001) > 2.8 && rms > 0.012) {
+    if (rms / (old + 0.001) > 2.8 && rms > 0.001) {
       this._attackMs = Date.now();
     }
   }
@@ -1310,11 +1310,12 @@ class Pitch {
     this._attack(rms);
     const now = Date.now();
 
-    if (rms > 0.01) {
-      dbg('RMS: ' + rms.toFixed(4));
+    if (rms > 0.001) {
+      dbg('RMS: ' + rms.toFixed(5) + ' gain: ' + (this.gainNode ? this.gainNode.gain.value : '?'));
       const { freq, confidence } = this._mpm(this.tbuf, this.actx.sampleRate);
+      dbg('freq: ' + freq.toFixed(1) + ' conf: ' + confidence.toFixed(3));
 
-      if (freq > 27.5 && freq < 4200 && confidence > 0.45) {
+      if (freq > 27.5 && freq < 4200 && confidence > 0.25) {
         const midi = Math.round(12 * Math.log2(freq / 440) + 69);
 
         if (midi >= 24 && midi <= 108) {
@@ -1323,13 +1324,11 @@ class Pitch {
 
           const msSinceAttack   = now - this._attackMs;
           const msSinceLastNote = now - this._lastNoteMs;
-          const harmOk = this._harmonic(freq) > 0.30;
+          const harmOk = this._harmonic(freq) > 0.15;
+          dbg('midi: ' + midi + ' harmOk: ' + harmOk + ' attackMs: ' + msSinceAttack);
 
-          // Ausgabe wenn:
-          // - Frischer Anschlag (<250ms) + harmonisch
-          // - ODER harmonisch + Pause seit letzter Note
           const ok = (msSinceAttack < 250 && harmOk)
-                  || (harmOk && msSinceLastNote > 200 && rms > 0.018);
+                  || (harmOk && msSinceLastNote > 200 && rms > 0.001);
 
           if (ok && (voted !== this._lastNote || msSinceLastNote > 300)) {
             this._lastNote   = voted;
