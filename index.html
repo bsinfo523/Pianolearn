@@ -1162,7 +1162,8 @@ class Pitch {
 
       // Verstärker für leise Mikrofone (z.B. iPad)
       this.gainNode = this.actx.createGain();
-      this.gainNode.gain.value = 4.0; // 4x Verstärkung
+      const gainSlider = document.getElementById('gain-sl');
+      this.gainNode.gain.value = gainSlider ? parseFloat(gainSlider.value) : 4.0;
 
       this.anT = this.actx.createAnalyser();
       this.anT.fftSize = 4096;
@@ -1324,11 +1325,10 @@ class Pitch {
 
           const msSinceAttack   = now - this._attackMs;
           const msSinceLastNote = now - this._lastNoteMs;
-          const harmOk = this._harmonic(freq) > 0.15;
-          dbg('midi: ' + midi + ' harmOk: ' + harmOk + ' attackMs: ' + msSinceAttack);
+          dbg('midi: ' + midi + ' attackMs: ' + msSinceAttack + ' conf: ' + confidence.toFixed(3));
 
-          const ok = (msSinceAttack < 250 && harmOk)
-                  || (harmOk && msSinceLastNote > 200 && rms > 0.001);
+          const ok = (msSinceAttack < 500 && confidence > 0.25)
+                  || (msSinceLastNote > 200 && confidence > 0.25);
 
           if (ok && (voted !== this._lastNote || msSinceLastNote > 300)) {
             this._lastNote   = voted;
