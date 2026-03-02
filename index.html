@@ -1154,6 +1154,10 @@ class Pitch {
       dbg('Stream OK, tracks: ' + stream.getAudioTracks().length);
       const src = this.actx.createMediaStreamSource(stream);
 
+      // Verstärker für leise Mikrofone (z.B. iPad)
+      this.gainNode = this.actx.createGain();
+      this.gainNode.gain.value = 4.0; // 4x Verstärkung
+
       this.anT = this.actx.createAnalyser();
       this.anT.fftSize = 4096;
       this.anT.smoothingTimeConstant = 0;
@@ -1162,8 +1166,9 @@ class Pitch {
       this.anF.fftSize = 4096;
       this.anF.smoothingTimeConstant = 0.2;
 
-      src.connect(this.anT);
-      src.connect(this.anF);
+      src.connect(this.gainNode);
+      this.gainNode.connect(this.anT);
+      this.gainNode.connect(this.anF);
 
       this.tbuf = new Float32Array(4096);
       this.fbuf = new Float32Array(this.anF.frequencyBinCount);
@@ -1258,7 +1263,7 @@ class Pitch {
     this._rmsHist[this._rmsI % 6] = rms;
     this._rmsI++;
     const old = this._rmsHist[(this._rmsI + 6 - 4) % 6];
-    if (rms / (old + 0.001) > 2.8 && rms > 0.025) {
+    if (rms / (old + 0.001) > 2.8 && rms > 0.012) {
       this._attackMs = Date.now();
     }
   }
@@ -1299,7 +1304,7 @@ class Pitch {
     this._attack(rms);
     const now = Date.now();
 
-    if (rms > 0.02) {
+    if (rms > 0.01) {
       dbg('RMS: ' + rms.toFixed(4));
       const { freq, confidence } = this._mpm(this.tbuf, this.actx.sampleRate);
 
@@ -1318,7 +1323,7 @@ class Pitch {
           // - Frischer Anschlag (<250ms) + harmonisch
           // - ODER harmonisch + Pause seit letzter Note
           const ok = (msSinceAttack < 250 && harmOk)
-                  || (harmOk && msSinceLastNote > 200 && rms > 0.035);
+                  || (harmOk && msSinceLastNote > 200 && rms > 0.018);
 
           if (ok && (voted !== this._lastNote || msSinceLastNote > 300)) {
             this._lastNote   = voted;
