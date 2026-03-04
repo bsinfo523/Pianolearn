@@ -768,11 +768,14 @@ function drawMiniStaffAll(seq, currentIdx){
   ctx.textBaseline='bottom';ctx.textAlign='left';
   ctx.fillText('𝄞',2,ST+SH+SH*0.15);
 
-  // Spread notes evenly across full staff width
+  // Spread notes evenly across full staff width, with padding on both sides
+  const notePadL = marginL + 20; // extra indent from clef
+  const notePadR = marginR + 20; // extra indent from right edge
+  const noteAreaW = W - notePadL - notePadR;
   seq.forEach((midi,i)=>{
     const noteX = N===1
-      ? marginL + availW/2
-      : marginL + i*(availW/(N-1>0?N-1:1));
+      ? notePadL + noteAreaW/2
+      : notePadL + i*(noteAreaW/(N-1>0?N-1:1));
 
     const step=midiStepMini(midi);
     const noteY=ST+SH-step*(sp/2);
