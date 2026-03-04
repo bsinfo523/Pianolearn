@@ -100,39 +100,31 @@ header{display:flex;align-items:center;justify-content:space-between;padding:8px
 .ex-progress{font-size:0.78rem;font-family:'DM Mono',monospace;background:rgba(255,255,255,0.12);padding:3px 10px;border-radius:12px;}
 .ex-body{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 
-/* LESSON AREA */
-#lesson-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;padding:8px 14px 6px;overflow-y:auto;}
-.lesson-instruction{font-size:0.92rem;font-weight:600;text-align:center;max-width:400px;line-height:1.4;}
+/* LESSON AREA – compact, fills available space evenly */
+#lesson-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;gap:4px;padding:6px 12px 4px;overflow:hidden;min-height:0;}
+.lesson-instruction{font-size:0.88rem;font-weight:600;text-align:center;max-width:400px;line-height:1.3;flex-shrink:0;}
 
-/* ── FIX 3: Stats row – always visible, counts correctly ── */
-.lesson-stats{
-  display:flex;width:100%;max-width:340px;
-  background:rgba(0,0,0,0.25);border-radius:12px;overflow:hidden;
-  flex-shrink:0;
-}
-.lesson-stat{flex:1;display:flex;flex-direction:column;align-items:center;padding:7px 4px;gap:1px;border-right:1px solid rgba(255,255,255,0.07);}
+/* Stats bar – single bar shared between lesson and song, always at top of ex-body */
+.lesson-stats{display:flex;width:100%;background:rgba(0,0,0,0.25);border-radius:0;overflow:hidden;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.06);}
+.lesson-stat{flex:1;display:flex;flex-direction:column;align-items:center;padding:5px 4px;gap:0;border-right:1px solid rgba(255,255,255,0.07);}
 .lesson-stat:last-child{border-right:none;}
-.lesson-stat-val{
-  font-size:1.15rem;font-weight:800;
-  font-family:'DM Mono',monospace;font-variant-numeric:tabular-nums;
-  transition:transform 0.15s,color 0.15s;
-}
+.lesson-stat-val{font-size:1.05rem;font-weight:800;font-family:'DM Mono',monospace;font-variant-numeric:tabular-nums;transition:transform 0.15s,color 0.15s;}
 .lesson-stat-val.bump{animation:lsbump 0.3s ease;}
 @keyframes lsbump{0%{transform:scale(1)}50%{transform:scale(1.5);color:var(--accent)}100%{transform:scale(1)}}
-.lesson-stat-lbl{font-size:0.52rem;letter-spacing:1.2px;color:rgba(255,255,255,0.45);text-transform:uppercase;}
+.lesson-stat-lbl{font-size:0.5rem;letter-spacing:1px;color:rgba(255,255,255,0.45);text-transform:uppercase;}
 
-/* ── FIX 1: Staff now scrollable / wide for many notes ── */
-.lesson-note-display{display:flex;flex-direction:column;align-items:center;gap:3px;width:100%;}
+/* Staff – full width, height calculated by JS */
+.lesson-note-display{display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;flex-shrink:0;}
 .staff-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
-#staff-mini-canvas{display:block;height:110px;}
+#staff-mini-canvas{display:block;}
 
-.note-name-big{font-size:2.6rem;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;}
-.note-hint{font-size:0.75rem;color:rgba(255,255,255,0.5);text-align:center;max-width:300px;}
-.lesson-feedback{font-size:0.95rem;font-weight:700;min-height:22px;text-align:center;}
+.note-name-big{font-size:2rem;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;line-height:1;flex-shrink:0;}
+.note-hint{font-size:0.72rem;color:rgba(255,255,255,0.5);text-align:center;max-width:300px;flex-shrink:0;}
+.lesson-feedback{font-size:0.9rem;font-weight:700;min-height:18px;text-align:center;flex-shrink:0;}
 .lesson-feedback.ok{color:var(--green);}
 .lesson-feedback.bad{color:var(--red);}
-.notes-sequence{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;}
-.seq-note{width:38px;height:38px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;font-family:'DM Mono',monospace;transition:all 0.2s;}
+.notes-sequence{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;flex-shrink:0;}
+.seq-note{width:34px;height:34px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.75rem;font-family:'DM Mono',monospace;transition:all 0.2s;}
 .seq-note.pending{background:rgba(255,255,255,0.06);}
 .seq-note.current{background:var(--accent);color:#1a1626;border-color:var(--accent);transform:scale(1.15);}
 .seq-note.done-ok{background:var(--green);border-color:var(--green);}
@@ -160,19 +152,19 @@ header{display:flex;align-items:center;justify-content:space-between;padding:8px
 .tempo-btn{padding:3px 9px;border-radius:10px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-family:'DM Mono',monospace;font-size:0.73rem;cursor:pointer;transition:all 0.15s;}
 .tempo-btn.active{background:var(--accent);color:#1a1626;border-color:var(--accent);}
 
-/* ── FIX 2: Piano fully visible – safe-area padding at bottom ── */
+/* Piano – fixed proportional height, always fully visible */
 #piano-wrap{
-  flex:1;min-height:80px;
-  display:flex;align-items:flex-start;justify-content:center;
+  flex-shrink:0;
+  height:clamp(90px, 20vh, 150px); /* proportional, never too small or too big */
+  display:flex;align-items:stretch;justify-content:center;
   background:linear-gradient(180deg,rgba(0,0,0,0.28),rgba(0,0,0,0.45));
   overflow:hidden;
-  padding-top:4px;
-  /* This padding pushes content above system navigation bar */
-  padding-bottom:max(10px, env(safe-area-inset-bottom, 10px));
+  padding-top:3px;
+  padding-bottom:max(8px, env(safe-area-inset-bottom, 8px));
   touch-action:none;
 }
-#piano{position:relative;display:flex;height:100%;touch-action:none;}
-.wk{position:relative;flex:1;min-width:22px;max-width:48px;height:100%;background:var(--piano-white);border:1px solid #c0b8a8;border-top:none;border-radius:0 0 5px 5px;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;padding-bottom:3px;transition:background 0.05s;box-shadow:inset 0 -3px 6px rgba(0,0,0,0.1);}
+#piano{position:relative;display:flex;width:100%;height:100%;touch-action:none;align-items:stretch;}
+.wk{position:relative;flex:1;min-width:18px;max-width:48px;height:100%;background:var(--piano-white);border:1px solid #c0b8a8;border-top:3px solid #a09888;border-radius:0 0 5px 5px;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;padding-bottom:3px;transition:background 0.05s;box-shadow:inset 0 -3px 6px rgba(0,0,0,0.1);}
 .wk .kl{font-size:0.45rem;font-family:'DM Mono',monospace;color:#9ca3af;}
 .wk.nxt{background:#ddd6fe!important;box-shadow:0 0 12px rgba(167,139,250,0.6);}
 .wk.hit{background:#6ee7b7!important;}
@@ -283,25 +275,25 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
   </div>
   <div class="ex-body">
 
+    <!-- Single stats bar – used by BOTH lesson and song mode -->
+    <div class="lesson-stats" id="ex-stats">
+      <div class="lesson-stat">
+        <div class="lesson-stat-val" id="ls-score">0</div>
+        <div class="lesson-stat-lbl">Punkte</div>
+      </div>
+      <div class="lesson-stat">
+        <div class="lesson-stat-val" id="ls-streak">0</div>
+        <div class="lesson-stat-lbl">Streak 🔥</div>
+      </div>
+      <div class="lesson-stat">
+        <div class="lesson-stat-val" id="ls-acc">–</div>
+        <div class="lesson-stat-lbl">Genauigkeit</div>
+      </div>
+    </div>
+
     <!-- LESSON AREA -->
     <div id="lesson-area" class="hidden">
       <div class="lesson-instruction" id="lesson-instr"></div>
-
-      <!-- FIX 3: Stats always visible + functional -->
-      <div class="lesson-stats">
-        <div class="lesson-stat">
-          <div class="lesson-stat-val" id="ls-score">0</div>
-          <div class="lesson-stat-lbl">Punkte</div>
-        </div>
-        <div class="lesson-stat">
-          <div class="lesson-stat-val" id="ls-streak">0</div>
-          <div class="lesson-stat-lbl">Streak 🔥</div>
-        </div>
-        <div class="lesson-stat">
-          <div class="lesson-stat-val" id="ls-acc">–</div>
-          <div class="lesson-stat-lbl">Genauigkeit</div>
-        </div>
-      </div>
 
       <!-- FIX 1: All notes shown side-by-side on staff -->
       <div class="lesson-note-display">
@@ -317,11 +309,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 
     <!-- SONG AREA -->
     <div id="song-area" class="hidden">
-      <div class="scores">
-        <div class="sc"><div class="sc-n" id="n-score">0</div><div class="sc-l">Punkte</div></div>
-        <div class="sc"><div class="sc-n" id="n-streak">0</div><div class="sc-l">Streak 🔥</div></div>
-        <div class="sc"><div class="sc-n" id="n-acc">–</div><div class="sc-l">Genauigkeit</div></div>
-      </div>
       <div id="prog-wrap"><div id="prog-bar"></div></div>
       <div id="sheet-area">
         <canvas id="sheet-canvas"></canvas>
@@ -342,9 +329,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
         <div class="ctrl-sep"></div>
         <button class="btn btn-white" id="play-btn" onclick="togglePlay()" style="border-radius:8px;padding:4px 13px">▶ Play</button>
       </div>
-      <!-- FIX 2: piano-wrap has safe-area padding -->
-      <div id="piano-wrap"><div id="piano"></div></div>
     </div>
+
+    <!-- Piano always at bottom of exercise screen, regardless of lesson/song mode -->
+    <div id="piano-wrap"><div id="piano"></div></div>
 
   </div>
 </div>
@@ -509,8 +497,15 @@ function startApp(){
 function enterHome(){
   document.getElementById('greeting-name').textContent=playerName;
   document.getElementById('name-change').value=playerName;
-  showScreen('home-screen');buildPiano();renderCourses();resize();
-  setTimeout(()=>{resize();drawScene(-INTRO_MS);},100);
+  showScreen('home-screen');
+  buildPiano();
+  renderCourses();
+  // Use rAF chain to ensure DOM is painted before measuring piano
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    positionBlackKeys();
+    resize();
+    drawScene(-INTRO_MS);
+  }));
   saveCurrentPlayer();
 }
 function goWelcome(){stopSong();saveCurrentPlayer();currentMode='home';showScreen('welcome-screen');renderWelcomePlayers();}
@@ -572,13 +567,25 @@ function startLesson(ci,li){
     currentMode='lesson';
     document.getElementById('lesson-area').classList.remove('hidden');
     document.getElementById('song-area').classList.add('hidden');
-    initLessonMode();
+    // Wait for layout before measuring canvas/piano
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      positionBlackKeys();
+      initLessonMode();
+    }));
   } else {
     currentMode='song';
     document.getElementById('song-area').classList.remove('hidden');
     document.getElementById('lesson-area').classList.add('hidden');
     const sd=SONGS_DB[currentLesson.song]||importedSongs.find(s=>s.key===currentLesson.song);
-    if(sd){songNotes=sd.notes;restartSong();resize();if(!rafId)rafId=requestAnimationFrame(loop);}
+    if(sd){
+      songNotes=sd.notes;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        positionBlackKeys();
+        resize();
+        restartSong();
+        if(!rafId)rafId=requestAnimationFrame(loop);
+      }));
+    }
   }
 }
 function exitExercise(){stopSong();currentMode='course';showCourse(currentCourseIdx);}
@@ -627,6 +634,7 @@ function showCurrentTarget(){
   document.getElementById('note-hint').textContent=NOTE_HINTS[midi]||currentLesson.hint||'';
   drawMiniStaffAll(lessonSeq, lessonPos);
   highlightKey(midi,'nxt');
+  // Show how many are DONE out of total (lessonPos = number done so far)
   document.getElementById('ex-progress').textContent=`${lessonPos}/${lessonTotal}`;
 }
 
@@ -645,6 +653,8 @@ function updateLessonUI(animate=true){
 
 function lessonComplete(){
   progress[currentLesson.id]='done';saveCurrentPlayer();awaitingNote=false;clearKeys();
+  // Update progress badge to show full completion e.g. 3/3
+  document.getElementById('ex-progress').textContent=`${lessonTotal}/${lessonTotal}`;
   document.getElementById('target-note-name').textContent='🎉';
   document.getElementById('note-hint').textContent='';
   document.getElementById('lesson-feedback').textContent='';
@@ -663,7 +673,7 @@ function lessonComplete(){
 }
 function nextLesson(){const course=CURRICULUM[currentCourseIdx];if(currentLessonIdx+1<course.lessons.length)startLesson(currentCourseIdx,currentLessonIdx+1);else exitExercise();}
 
-// ── FIX 3: handleLessonNote now actually updates stats ──
+// handleLessonNote – updates stats, advances sequence, completes lesson
 function handleLessonNote(midi){
   if(!awaitingNote||currentMode!=='lesson')return;
   if(lessonPos>=lessonTotal)return;
@@ -676,10 +686,20 @@ function handleLessonNote(midi){
     fb.textContent='✓ Richtig!'+(bonus>0?` +${bonus} Bonus`:'');fb.className='lesson-feedback ok';
     setKey(midi,'hit');setTimeout(()=>setKey(midi,null),280);
     lessonPos++;
+    // Update sequence dots
     const el=document.getElementById('sq'+(lessonPos-1));if(el)el.className='seq-note done-ok';
     const nx=document.getElementById('sq'+lessonPos);if(nx)nx.className='seq-note current';
-    drawMiniStaffAll(lessonSeq, lessonPos);
-    setTimeout(()=>{fb.textContent='';showCurrentTarget();},350);
+    // Update progress counter immediately
+    document.getElementById('ex-progress').textContent=`${lessonPos}/${lessonTotal}`;
+    if(lessonPos>=lessonTotal){
+      // Last note done – block further input immediately, complete after short delay
+      awaitingNote=false;
+      drawMiniStaffAll(lessonSeq, lessonPos);
+      setTimeout(()=>{fb.textContent='';lessonComplete();},400);
+    } else {
+      drawMiniStaffAll(lessonSeq, lessonPos);
+      setTimeout(()=>{fb.textContent='';showCurrentTarget();},350);
+    }
   } else {
     lStreak=0;lTotal++;
     updateLessonUI(true);
@@ -697,20 +717,27 @@ function handleLessonNote(midi){
 function drawMiniStaffAll(seq, currentIdx){
   const cv=document.getElementById('staff-mini-canvas');
   const N=seq.length;
-  // Min 60px per note, plus margins
-  const noteSpacing=60;
-  const marginL=46, marginR=24;
-  const W=Math.max(280, marginL+N*noteSpacing+marginR);
-  const H=110;
+  // Use full container width – staff fills the display
+  const containerW = cv.parentElement ? cv.parentElement.clientWidth : window.innerWidth;
+  const marginL=50, marginR=20;
+  // Each note gets equal space; min 55px per note for readability
+  const noteSpacingMin=55;
+  const availW=containerW-marginL-marginR;
+  const noteSpacing=Math.max(noteSpacingMin, N>1?availW/(N):availW);
+  const W=Math.max(containerW, marginL+N*noteSpacing+marginR);
+  // Height: scale with screen, but cap nicely
+  const H=Math.round(Math.min(window.innerHeight*0.22, 140));
   cv.width=W; cv.height=H;
-  // Make canvas fill its parent width for display, but actual pixel width = W
   cv.style.width=W+'px';
   cv.style.height=H+'px';
 
   const ctx=cv.getContext('2d');
   ctx.clearRect(0,0,W,H);
 
-  const ST=18, SH=50, sp=SH/4;
+  // Staff geometry scaled to canvas height
+  const ST=Math.round(H*0.12);
+  const SH=Math.round(H*0.52);
+  const sp=SH/4;
 
   // Staff lines
   ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=1.2;
@@ -724,11 +751,11 @@ function drawMiniStaffAll(seq, currentIdx){
   ctx.textBaseline='bottom';ctx.textAlign='left';
   ctx.fillText('𝄞',2,ST+SH+SH*0.15);
 
-  // Spread notes evenly
+  // Spread notes evenly across full staff width
   seq.forEach((midi,i)=>{
     const noteX = N===1
-      ? (marginL+W-marginR)/2
-      : marginL + i*noteSpacing + noteSpacing/2;
+      ? marginL + availW/2
+      : marginL + i*(availW/(N-1>0?N-1:1));
 
     const step=midiStepMini(midi);
     const noteY=ST+SH-step*(sp/2);
@@ -811,6 +838,8 @@ function buildPiano(){
 function positionBlackKeys(){
   const piano=document.getElementById('piano');piano.querySelectorAll('.bk').forEach(e=>e.remove());
   const wEls=Array.from(piano.querySelectorAll('.wk'));if(!wEls.length)return;
+  // If piano not laid out yet (offsetWidth=0), retry after next paint
+  if(!wEls[0].offsetWidth){requestAnimationFrame(positionBlackKeys);return;}
   const bW=Math.round(wEls[0].offsetWidth*0.62);
   for(let oI=0;oI<OCTAVES.length;oI++){const o=OCTAVES[oI];
     for(const[sStr]of Object.entries(BLACK_OFFSETS)){const s=Number(sStr);const midi=(o+1)*12+s;
@@ -931,7 +960,12 @@ function handleSongNote(midi){
   }
   streak=0;total++;showFb('✗ Falsch',false);setKey(midi,'miss');setTimeout(()=>setKey(midi,null),320);updateUI();
 }
-function updateUI(){document.getElementById('n-score').textContent=score;document.getElementById('n-streak').textContent=streak;document.getElementById('n-acc').textContent=total>0?Math.round(hits/total*100)+'%':'–';}
+function updateUI(){
+  // Unified stats bar shared between lesson and song mode
+  document.getElementById('ls-score').textContent=score;
+  document.getElementById('ls-streak').textContent=streak;
+  document.getElementById('ls-acc').textContent=total>0?Math.round(hits/total*100)+'%':'–';
+}
 function showFb(msg,ok){const box=document.getElementById('feedback-box');const p=document.createElement('div');p.className='fb '+(ok?'fb-ok':'fb-bad');p.textContent=msg;box.appendChild(p);setTimeout(()=>p.remove(),800);}
 
 function endSong(){
