@@ -219,6 +219,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 .lesson-complete{background:linear-gradient(135deg,var(--green),#059669);border-radius:16px;padding:20px 16px;text-align:center;display:flex;flex-direction:column;gap:8px;width:100%;max-width:360px;}
 .lesson-complete h3{font-size:1.1rem;font-weight:700;}
 .lesson-complete p{font-size:0.85rem;opacity:0.9;}
+.settings-hint{font-size:0.68rem;color:rgba(255,255,255,0.38);padding:0 2px 6px 2px;line-height:1.3;}
 .upload-area{border:2px dashed rgba(255,255,255,0.18);border-radius:12px;padding:12px;text-align:center;cursor:pointer;transition:all 0.2s;position:relative;color:rgba(255,255,255,0.45);font-size:0.78rem;}
 .upload-area:hover{border-color:var(--accent);color:#fff;}
 .upload-area input{position:absolute;inset:0;opacity:0;cursor:pointer;}
@@ -354,9 +355,42 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
     <div class="settings-section">
       <h3>🎤 Mikrofon</h3>
       <div class="settings-row"><span class="settings-label">Mikrofon</span><button class="toggle-btn" id="mic-toggle-btn" onclick="toggleMic()">AUS</button></div>
-      <div class="settings-row"><span class="settings-label">Verstärkung (Gain)</span><div style="display:flex;align-items:center;gap:8px"><input type="range" id="gain-sl" min="1" max="20" value="4" step="1" oninput="setGain(this.value)"><span class="settings-val" id="gain-val">4x</span></div></div>
-      <div class="settings-row"><span class="settings-label">Konfidenz-Schwelle</span><div style="display:flex;align-items:center;gap:8px"><input type="range" id="conf-sl" min="10" max="60" value="25" step="5" oninput="setConf(this.value)"><span class="settings-val" id="conf-val">0.25</span></div></div>
-      <div class="settings-row"><span class="settings-label">Attack-Ratio</span><div style="display:flex;align-items:center;gap:8px"><input type="range" id="attack-sl" min="15" max="50" value="28" step="1" oninput="setAttack(this.value)"><span class="settings-val" id="attack-val">2.8</span></div></div>
+
+      <div class="settings-row">
+        <span class="settings-label">Verstärkung</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="range" id="gain-sl" min="1" max="20" value="4" step="1" oninput="setGain(this.value)">
+          <span class="settings-val" id="gain-val">4x</span>
+        </div>
+      </div>
+      <div class="settings-hint">Erhöhen wenn das Mikrofon leise ist</div>
+
+      <div class="settings-row">
+        <span class="settings-label">Lautstärke-Schwelle</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="range" id="rms-sl" min="2" max="40" value="12" step="1" oninput="setRms(this.value)">
+          <span class="settings-val" id="rms-val">12</span>
+        </div>
+      </div>
+      <div class="settings-hint">⬆ höher = weniger Fehlauslösungen durch Rauschen</div>
+
+      <div class="settings-row">
+        <span class="settings-label">Erkennungs-Konfidenz</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="range" id="conf-sl" min="15" max="65" value="35" step="5" oninput="setConf(this.value)">
+          <span class="settings-val" id="conf-val">0.35</span>
+        </div>
+      </div>
+      <div class="settings-hint">⬆ höher = sicherer aber langsamer</div>
+
+      <div class="settings-row">
+        <span class="settings-label">Stabilitäts-Filter</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="range" id="hold-sl" min="1" max="7" value="3" step="1" oninput="setHold(this.value)">
+          <span class="settings-val" id="hold-val">3</span>
+        </div>
+      </div>
+      <div class="settings-hint">⬆ höher = weniger Fehlauslösungen, aber etwas träger</div>
     </div>
     <div class="settings-section">
       <h3>🎹 MIDI</h3>
@@ -1028,7 +1062,8 @@ function toggleLabels(){showLabels=!showLabels;document.getElementById('label-bt
 // ══════════════════════════════════════
 function setGain(v){document.getElementById('gain-val').textContent=v+'x';if(pitch&&pitch.gainNode)pitch.gainNode.gain.value=parseFloat(v);}
 function setConf(v){pitchConf=v/100;document.getElementById('conf-val').textContent=(v/100).toFixed(2);}
-function setAttack(v){attackRatio=v/10;document.getElementById('attack-val').textContent=(v/10).toFixed(1);}
+function setRms(v){rmsThreshold=v/1000;document.getElementById('rms-val').textContent=v;}
+function setHold(v){holdFrames=parseInt(v);document.getElementById('hold-val').textContent=v;}
 function saveName(){const n=document.getElementById('name-change').value.trim();if(!n)return;const old=playerName;deletePlayer(old);playerName=n;saveCurrentPlayer();document.getElementById('greeting-name').textContent=n;}
 function resetProgress(){if(!confirm('Fortschritt wirklich löschen?'))return;progress={};saveCurrentPlayer();renderCourses();}
 
@@ -1037,8 +1072,15 @@ function toggleDebug(){debugOn=!debugOn;const el=document.getElementById('_dbg')
 function dbg(m){if(!debugOn)return;const el=document.getElementById('_dbg');el.innerHTML+=m+'<br>';el.scrollTop=el.scrollHeight;}
 
 // ══════════════════════════════════════
-// MICROPHONE
+// MICROPHONE – robuste Pitch-Detection
+// Параметры die in den Einstellungen steuerbar sind:
+//   pitchConf      = NSDF-Konfidenz-Schwelle (0.1–0.7, default 0.35)
+//   rmsThreshold   = Lautstärke-Schwelle (0.003–0.05, default 0.012)
+//   holdFrames     = Wie viele Frames dieselbe Note bestätigt sein muss (1–6, default 3)
 // ══════════════════════════════════════
+let rmsThreshold = 0.012;   // Lautstärke-Schwelle – unter diesem Wert kein Ton
+let holdFrames   = 3;       // Stabilitätszähler – Note muss N Frames gleich sein
+
 class Pitch{
   async start(){
     try{
@@ -1047,29 +1089,121 @@ class Pitch{
       if(this.actx.state==='suspended')await this.actx.resume();
       this.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false},video:false});
       const src=this.actx.createMediaStreamSource(this.stream);
-      this.gainNode=this.actx.createGain();this.gainNode.gain.value=parseFloat(document.getElementById('gain-sl').value)||4;
-      this.anT=this.actx.createAnalyser();this.anT.fftSize=4096;this.anT.smoothingTimeConstant=0;
+      this.gainNode=this.actx.createGain();
+      this.gainNode.gain.value=parseFloat(document.getElementById('gain-sl').value)||4;
+      this.anT=this.actx.createAnalyser();
+      this.anT.fftSize=8192;           // größer = genauere Frequenz
+      this.anT.smoothingTimeConstant=0;
       src.connect(this.gainNode);this.gainNode.connect(this.anT);
-      this.tbuf=new Float32Array(4096);this._mf=[];this._rmsHist=[0,0,0,0,0,0];this._rmsI=0;this._attackMs=0;this._lastNote=-1;this._lastNoteMs=0;
-      this.active=true;this._go();return true;
+      this.tbuf=new Float32Array(8192);
+      // Zustand
+      this._candidate=-1;   // aktuell bestätigte Kandidaten-Note
+      this._holdCount=0;    // wie viele Frames candidate schon gehalten wird
+      this._lastFired=-1;   // zuletzt ausgelöste Note
+      this._lastFiredMs=0;  // Zeitstempel
+      this._silenceCount=0; // Frames ohne Signal (für Re-Trigger)
+      this.active=true;
+      this._go();
+      return true;
     }catch(e){dbg('MIC ERROR: '+e.message);return false;}
   }
-  stop(){this.active=false;if(this.stream)this.stream.getTracks().forEach(t=>t.stop());if(this.actx)try{this.actx.close();}catch{}this.actx=null;this.stream=null;this.gainNode=null;this.anT=null;}
-  _mpm(buf,sr){const N=buf.length,maxLag=Math.floor(N/2);const nsdf=new Float32Array(maxLag);for(let tau=0;tau<maxLag;tau++){let a=0,n=0;for(let j=0;j<N-tau;j++){a+=buf[j]*buf[j+tau];n+=buf[j]*buf[j]+buf[j+tau]*buf[j+tau];}nsdf[tau]=n>1e-10?2*a/n:0;}const TH=pitchConf||0.25;let bestTau=-1,i=1;while(i<maxLag-1&&nsdf[i]>0)i++;while(i<maxLag-2){while(i<maxLag-1&&nsdf[i]<=0)i++;let lm=0,lt=i;while(i<maxLag-1&&nsdf[i]>0){if(nsdf[i]>lm){lm=nsdf[i];lt=i;}i++;}if(lm>TH){bestTau=lt;break;}}if(bestTau<2||bestTau>=maxLag-1)return{freq:-1,confidence:0};const y0=nsdf[bestTau-1],y1=nsdf[bestTau],y2=nsdf[bestTau+1];const d=2*y1-y0-y2;return{freq:sr/(d>1e-8?bestTau+(y0-y2)/(2*d):bestTau),confidence:y1};}
-  _vote(midi){this._mf.push(midi);if(this._mf.length>3)this._mf.shift();const c={};for(const n of this._mf)c[n]=(c[n]||0)+1;for(const[n,v]of Object.entries(c))if(v>=2)return Number(n);return -1;}
-  _attack(rms){this._rmsHist[this._rmsI%6]=rms;this._rmsI++;const old=this._rmsHist[(this._rmsI+6-4)%6];if(rms/(old+0.001)>(attackRatio||2.8)&&rms>0.001)this._attackMs=Date.now();}
+
+  stop(){
+    this.active=false;
+    if(this.stream)this.stream.getTracks().forEach(t=>t.stop());
+    if(this.actx)try{this.actx.close();}catch{}
+    this.actx=null;this.stream=null;this.gainNode=null;this.anT=null;
+  }
+
+  // MPM-Algorithmus (McLeod Pitch Method) – liefert Frequenz + Konfidenz
+  _mpm(buf,sr){
+    const N=buf.length, maxLag=Math.floor(N/2);
+    const nsdf=new Float32Array(maxLag);
+    for(let tau=0;tau<maxLag;tau++){
+      let a=0,n=0;
+      for(let j=0;j<N-tau;j++){a+=buf[j]*buf[j+tau];n+=buf[j]*buf[j]+buf[j+tau]*buf[j+tau];}
+      nsdf[tau]=n>1e-10?2*a/n:0;
+    }
+    const TH=pitchConf||0.35;
+    let bestTau=-1,i=1;
+    while(i<maxLag-1&&nsdf[i]>0)i++;
+    while(i<maxLag-2){
+      while(i<maxLag-1&&nsdf[i]<=0)i++;
+      let lm=0,lt=i;
+      while(i<maxLag-1&&nsdf[i]>0){if(nsdf[i]>lm){lm=nsdf[i];lt=i;}i++;}
+      if(lm>TH){bestTau=lt;break;}
+    }
+    if(bestTau<2||bestTau>=maxLag-1)return{freq:-1,confidence:0};
+    const y0=nsdf[bestTau-1],y1=nsdf[bestTau],y2=nsdf[bestTau+1];
+    const d=2*y1-y0-y2;
+    return{freq:sr/(d>1e-8?bestTau+(y0-y2)/(2*d):bestTau),confidence:y1};
+  }
+
   _go(){
     if(!this.active)return;
-    if(this.actx&&this.actx.state==='suspended'){this.actx.resume().then(()=>requestAnimationFrame(()=>this._go()));return;}
-    this.anT.getFloatTimeDomainData(this.tbuf);let rms=0;for(const x of this.tbuf)rms+=x*x;rms=Math.sqrt(rms/this.tbuf.length);
-    this._attack(rms);const now=Date.now();
-    if(rms>0.002){const{freq,confidence}=this._mpm(this.tbuf,this.actx.sampleRate);dbg(`rms:${rms.toFixed(4)} f:${freq.toFixed(1)} c:${confidence.toFixed(3)}`);
-      if(freq>27.5&&freq<4200&&confidence>0.3){const midi=Math.round(12*Math.log2(freq/440)+69);
-        if(midi>=24&&midi<=108){const voted=this._vote(midi);if(voted<0){requestAnimationFrame(()=>this._go());return;}
-          const msSA=now-this._attackMs,msSLN=now-this._lastNoteMs;const ok=(msSA<500&&confidence>0.3)||(msSLN>250&&confidence>0.3);
-          if(ok&&(voted!==this._lastNote||msSLN>350)){this._lastNote=voted;this._lastNoteMs=now;this._mf=[];if(this.onNote)this.onNote(voted);}}}
-      else if(confidence<0.2)this._mf=[];
-    }else this._mf=[];
+    if(this.actx&&this.actx.state==='suspended'){
+      this.actx.resume().then(()=>requestAnimationFrame(()=>this._go()));return;
+    }
+    this.anT.getFloatTimeDomainData(this.tbuf);
+
+    // RMS berechnen
+    let rms=0;for(const x of this.tbuf)rms+=x*x;
+    rms=Math.sqrt(rms/this.tbuf.length);
+
+    const threshold = rmsThreshold || 0.012;
+
+    if(rms < threshold){
+      // Stille – Zustand zurücksetzen, aber erst nach mehreren Frames (Hysterese)
+      this._silenceCount++;
+      if(this._silenceCount > 4){
+        this._candidate=-1;
+        this._holdCount=0;
+        // Lastfired nach Stille zurücksetzen damit dieselbe Note nochmal erkannt wird
+        if(Date.now()-this._lastFiredMs > 400) this._lastFired=-1;
+      }
+      requestAnimationFrame(()=>this._go());return;
+    }
+    this._silenceCount=0;
+
+    const{freq,confidence}=this._mpm(this.tbuf,this.actx.sampleRate);
+    dbg(`rms:${rms.toFixed(4)} f:${freq.toFixed(1)} c:${confidence.toFixed(3)}`);
+
+    if(freq<27.5||freq>4200||confidence<(pitchConf||0.35)){
+      // Schwache Erkennung – Kandidaten-Zähler verringern aber nicht sofort löschen
+      this._holdCount=Math.max(0,this._holdCount-1);
+      requestAnimationFrame(()=>this._go());return;
+    }
+
+    const midi=Math.round(12*Math.log2(freq/440)+69);
+    if(midi<36||midi>96){requestAnimationFrame(()=>this._go());return;}
+
+    if(midi===this._candidate){
+      // Gleiche Note wieder – Zähler erhöhen
+      this._holdCount++;
+    } else {
+      // Neue Note – Kandidat wechseln, Zähler neu starten
+      this._candidate=midi;
+      this._holdCount=1;
+    }
+
+    // Erst auslösen wenn Note stabil genug (holdFrames Frames hintereinander)
+    const needed = holdFrames || 3;
+    const now=Date.now();
+    if(this._holdCount >= needed){
+      // Nicht nochmal auslösen wenn gerade dieselbe Note lief (außer nach Pause)
+      const sameNote = midi===this._lastFired;
+      const timeSinceLast = now-this._lastFiredMs;
+      const retriggerable = timeSinceLast > 500; // nach 500ms Pause darf dieselbe Note nochmal
+
+      if(!sameNote || retriggerable){
+        this._lastFired=midi;
+        this._lastFiredMs=now;
+        this._candidate=-1;   // Reset damit nächste Note frisch erkannt wird
+        this._holdCount=0;
+        if(this.onNote)this.onNote(midi);
+      }
+    }
+
     requestAnimationFrame(()=>this._go());
   }
 }
