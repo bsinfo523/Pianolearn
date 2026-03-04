@@ -386,11 +386,20 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
       <div class="settings-row">
         <span class="settings-label">Stabilitäts-Filter</span>
         <div style="display:flex;align-items:center;gap:8px">
-          <input type="range" id="hold-sl" min="1" max="7" value="3" step="1" oninput="setHold(this.value)">
-          <span class="settings-val" id="hold-val">3</span>
+          <input type="range" id="hold-sl" min="1" max="6" value="2" step="1" oninput="setHold(this.value)">
+          <span class="settings-val" id="hold-val">2</span>
         </div>
       </div>
-      <div class="settings-hint">⬆ höher = weniger Fehlauslösungen, aber etwas träger</div>
+      <div class="settings-hint">Mindest-Pitchframes im Onset-Fenster (1=sofort, 6=sicher)</div>
+
+      <div class="settings-row">
+        <span class="settings-label">Onset-Empfindlichkeit</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="range" id="onset-sl" min="1" max="10" value="5" step="1" oninput="setOnset(this.value)">
+          <span class="settings-val" id="onset-val">5</span>
+        </div>
+      </div>
+      <div class="settings-hint">⬇ niedrig = leise Töne erkannt · ⬆ hoch = nur kräftige Anschläge</div>
     </div>
     <div class="settings-section">
       <h3>🎹 MIDI</h3>
@@ -1064,6 +1073,7 @@ function setGain(v){document.getElementById('gain-val').textContent=v+'x';if(pit
 function setConf(v){pitchConf=v/100;document.getElementById('conf-val').textContent=(v/100).toFixed(2);}
 function setRms(v){rmsThreshold=v/1000;document.getElementById('rms-val').textContent=v;}
 function setHold(v){holdFrames=parseInt(v);document.getElementById('hold-val').textContent=v;}
+function setOnset(v){onsetSens=parseInt(v);document.getElementById('onset-val').textContent=v;}
 function saveName(){const n=document.getElementById('name-change').value.trim();if(!n)return;const old=playerName;deletePlayer(old);playerName=n;saveCurrentPlayer();document.getElementById('greeting-name').textContent=n;}
 function resetProgress(){if(!confirm('Fortschritt wirklich löschen?'))return;progress={};saveCurrentPlayer();renderCourses();}
 
@@ -1072,135 +1082,175 @@ function toggleDebug(){debugOn=!debugOn;const el=document.getElementById('_dbg')
 function dbg(m){if(!debugOn)return;const el=document.getElementById('_dbg');el.innerHTML+=m+'<br>';el.scrollTop=el.scrollHeight;}
 
 // ══════════════════════════════════════
-// MICROPHONE – robuste Pitch-Detection
-// Параметры die in den Einstellungen steuerbar sind:
-//   pitchConf      = NSDF-Konfidenz-Schwelle (0.1–0.7, default 0.35)
-//   rmsThreshold   = Lautstärke-Schwelle (0.003–0.05, default 0.012)
-//   holdFrames     = Wie viele Frames dieselbe Note bestätigt sein muss (1–6, default 3)
+// MICROPHONE – Onset-Detection + MPM
+//
+// Kernidee: Erst einen echten Tasten-Anschlag erkennen (Onset),
+// dann sofort in einem kurzen Fenster die Frequenz messen.
+// Außerhalb des Onset-Fensters wird NIE eine Note ausgelöst.
+//
+// Onset = plötzlicher Anstieg von:
+//   1) Gesamt-Energie (RMS-Anstieg)
+//   2) Spectral Flux (Frequenzspektrum ändert sich abrupt)
+// Beide müssen gleichzeitig über Schwelle → Onset bestätigt.
 // ══════════════════════════════════════
-let rmsThreshold = 0.012;   // Lautstärke-Schwelle – unter diesem Wert kein Ton
-let holdFrames   = 3;       // Stabilitätszähler – Note muss N Frames gleich sein
+let rmsThreshold = 0.012;
+let holdFrames   = 2;
+let onsetSens    = 5;   // Onset-Empfindlichkeit (1=sehr empfindlich, 10=sehr träge)
 
-class Pitch{
+class Pitch {
   async start(){
     try{
-      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('getUserMedia nicht verfügbar');
-      this.actx=new(window.AudioContext||window.webkitAudioContext)();
-      if(this.actx.state==='suspended')await this.actx.resume();
-      this.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false},video:false});
-      const src=this.actx.createMediaStreamSource(this.stream);
-      this.gainNode=this.actx.createGain();
-      this.gainNode.gain.value=parseFloat(document.getElementById('gain-sl').value)||4;
-      this.anT=this.actx.createAnalyser();
-      this.anT.fftSize=8192;           // größer = genauere Frequenz
-      this.anT.smoothingTimeConstant=0;
-      src.connect(this.gainNode);this.gainNode.connect(this.anT);
-      this.tbuf=new Float32Array(8192);
-      // Zustand
-      this._candidate=-1;   // aktuell bestätigte Kandidaten-Note
-      this._holdCount=0;    // wie viele Frames candidate schon gehalten wird
-      this._lastFired=-1;   // zuletzt ausgelöste Note
-      this._lastFiredMs=0;  // Zeitstempel
-      this._silenceCount=0; // Frames ohne Signal (für Re-Trigger)
-      this.active=true;
+      if(!navigator.mediaDevices?.getUserMedia) throw new Error('getUserMedia nicht verfügbar');
+      this.actx = new (window.AudioContext||window.webkitAudioContext)();
+      if(this.actx.state==='suspended') await this.actx.resume();
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:false, noiseSuppression:false, autoGainControl:false}, video:false
+      });
+      // Echo/Noise-Cancellation AUS – verfälscht das Signal für Pitch-Detection
+      const src = this.actx.createMediaStreamSource(this.stream);
+      this.gainNode = this.actx.createGain();
+      this.gainNode.gain.value = parseFloat(document.getElementById('gain-sl').value)||4;
+
+      // Zwei Analyser: kleiner (schnell) für Onset, großer (genau) für Pitch
+      this.anO = this.actx.createAnalyser(); // Onset-Analyser
+      this.anO.fftSize = 1024;
+      this.anO.smoothingTimeConstant = 0;
+
+      this.anP = this.actx.createAnalyser(); // Pitch-Analyser
+      this.anP.fftSize = 8192;
+      this.anP.smoothingTimeConstant = 0;
+
+      src.connect(this.gainNode);
+      this.gainNode.connect(this.anO);
+      this.gainNode.connect(this.anP);
+
+      this.tbufO  = new Float32Array(1024);
+      this.fbufO  = new Float32Array(this.anO.frequencyBinCount); // Spektrum für Flux
+      this.tbufP  = new Float32Array(8192);
+      this.prevFlux = new Float32Array(this.anO.frequencyBinCount); // vorheriges Spektrum
+
+      // Onset-Zustand
+      this._onsetMs    = 0;     // Zeitstempel letzter Onset
+      this._onsetActive= false; // Sind wir im Auswertungs-Fenster?
+      this._pitchBuf   = [];    // gesammelte Midi-Werte im Fenster
+      this._prevRms    = 0;
+      this._lastFired  = -1;
+      this._lastFiredMs= 0;
+      this._cooldownMs = 300;   // Mindestabstand zwischen zwei Auslösungen
+
+      this.active = true;
       this._go();
       return true;
-    }catch(e){dbg('MIC ERROR: '+e.message);return false;}
+    } catch(e){ dbg('MIC ERROR: '+e.message); return false; }
   }
 
   stop(){
     this.active=false;
-    if(this.stream)this.stream.getTracks().forEach(t=>t.stop());
-    if(this.actx)try{this.actx.close();}catch{}
-    this.actx=null;this.stream=null;this.gainNode=null;this.anT=null;
+    if(this.stream) this.stream.getTracks().forEach(t=>t.stop());
+    if(this.actx) try{ this.actx.close(); }catch{}
+    this.actx=null; this.stream=null; this.gainNode=null;
+    this.anO=null; this.anP=null;
   }
 
-  // MPM-Algorithmus (McLeod Pitch Method) – liefert Frequenz + Konfidenz
-  _mpm(buf,sr){
+  // MPM auf dem großen Buffer – sehr genaue Frequenzbestimmung
+  _mpm(buf, sr){
     const N=buf.length, maxLag=Math.floor(N/2);
     const nsdf=new Float32Array(maxLag);
     for(let tau=0;tau<maxLag;tau++){
       let a=0,n=0;
-      for(let j=0;j<N-tau;j++){a+=buf[j]*buf[j+tau];n+=buf[j]*buf[j]+buf[j+tau]*buf[j+tau];}
-      nsdf[tau]=n>1e-10?2*a/n:0;
+      for(let j=0;j<N-tau;j++){ a+=buf[j]*buf[j+tau]; n+=buf[j]*buf[j]+buf[j+tau]*buf[j+tau]; }
+      nsdf[tau]=n>1e-10 ? 2*a/n : 0;
     }
-    const TH=pitchConf||0.35;
-    let bestTau=-1,i=1;
-    while(i<maxLag-1&&nsdf[i]>0)i++;
+    const TH = pitchConf||0.35;
+    let bestTau=-1, i=1;
+    while(i<maxLag-1 && nsdf[i]>0) i++;
     while(i<maxLag-2){
-      while(i<maxLag-1&&nsdf[i]<=0)i++;
-      let lm=0,lt=i;
-      while(i<maxLag-1&&nsdf[i]>0){if(nsdf[i]>lm){lm=nsdf[i];lt=i;}i++;}
-      if(lm>TH){bestTau=lt;break;}
+      while(i<maxLag-1 && nsdf[i]<=0) i++;
+      let lm=0, lt=i;
+      while(i<maxLag-1 && nsdf[i]>0){ if(nsdf[i]>lm){lm=nsdf[i];lt=i;} i++; }
+      if(lm>TH){ bestTau=lt; break; }
     }
-    if(bestTau<2||bestTau>=maxLag-1)return{freq:-1,confidence:0};
+    if(bestTau<2||bestTau>=maxLag-1) return {freq:-1,confidence:0};
     const y0=nsdf[bestTau-1],y1=nsdf[bestTau],y2=nsdf[bestTau+1];
     const d=2*y1-y0-y2;
-    return{freq:sr/(d>1e-8?bestTau+(y0-y2)/(2*d):bestTau),confidence:y1};
+    return {freq: sr/(d>1e-8 ? bestTau+(y0-y2)/(2*d) : bestTau), confidence:y1};
   }
 
   _go(){
-    if(!this.active)return;
-    if(this.actx&&this.actx.state==='suspended'){
-      this.actx.resume().then(()=>requestAnimationFrame(()=>this._go()));return;
-    }
-    this.anT.getFloatTimeDomainData(this.tbuf);
-
-    // RMS berechnen
-    let rms=0;for(const x of this.tbuf)rms+=x*x;
-    rms=Math.sqrt(rms/this.tbuf.length);
-
-    const threshold = rmsThreshold || 0.012;
-
-    if(rms < threshold){
-      // Stille – Zustand zurücksetzen, aber erst nach mehreren Frames (Hysterese)
-      this._silenceCount++;
-      if(this._silenceCount > 4){
-        this._candidate=-1;
-        this._holdCount=0;
-        // Lastfired nach Stille zurücksetzen damit dieselbe Note nochmal erkannt wird
-        if(Date.now()-this._lastFiredMs > 400) this._lastFired=-1;
-      }
-      requestAnimationFrame(()=>this._go());return;
-    }
-    this._silenceCount=0;
-
-    const{freq,confidence}=this._mpm(this.tbuf,this.actx.sampleRate);
-    dbg(`rms:${rms.toFixed(4)} f:${freq.toFixed(1)} c:${confidence.toFixed(3)}`);
-
-    if(freq<27.5||freq>4200||confidence<(pitchConf||0.35)){
-      // Schwache Erkennung – Kandidaten-Zähler verringern aber nicht sofort löschen
-      this._holdCount=Math.max(0,this._holdCount-1);
-      requestAnimationFrame(()=>this._go());return;
+    if(!this.active) return;
+    if(this.actx?.state==='suspended'){
+      this.actx.resume().then(()=>requestAnimationFrame(()=>this._go())); return;
     }
 
-    const midi=Math.round(12*Math.log2(freq/440)+69);
-    if(midi<36||midi>96){requestAnimationFrame(()=>this._go());return;}
+    const now = Date.now();
 
-    if(midi===this._candidate){
-      // Gleiche Note wieder – Zähler erhöhen
-      this._holdCount++;
-    } else {
-      // Neue Note – Kandidat wechseln, Zähler neu starten
-      this._candidate=midi;
-      this._holdCount=1;
+    // ── 1. RMS aus kleinem Buffer ──
+    this.anO.getFloatTimeDomainData(this.tbufO);
+    let rms=0; for(const x of this.tbufO) rms+=x*x;
+    rms = Math.sqrt(rms/this.tbufO.length);
+
+    // ── 2. Spectral Flux: Wie stark ändert sich das Spektrum? ──
+    this.anO.getFloatFrequencyData(this.fbufO);
+    let flux=0;
+    for(let k=0;k<this.fbufO.length;k++){
+      const diff = this.fbufO[k]-this.prevFlux[k];
+      if(diff>0) flux+=diff; // nur positive Änderungen (Energie-Zuwachs)
+    }
+    this.prevFlux.set(this.fbufO);
+
+    // RMS-Anstieg gegenüber letztem Frame
+    const rmsRise = rms / (this._prevRms + 0.0001);
+    this._prevRms = rms;
+
+    const thr   = rmsThreshold || 0.012;
+    const sens  = onsetSens || 5;
+    // Onset = starker RMS-Anstieg UND hoher Spektral-Flux
+    // sens=1 → sehr leicht auslösbar, sens=10 → nur bei starkem Anschlag
+    const rmsOnset  = rmsRise > (1.5 + sens*0.4) && rms > thr;
+    const fluxOnset = flux > (200 + sens*60);
+
+    dbg(`rms:${rms.toFixed(4)} rise:${rmsRise.toFixed(2)} flux:${flux.toFixed(0)} onset:${rmsOnset&&fluxOnset}`);
+
+    if(rmsOnset && fluxOnset && (now-this._lastFiredMs) > this._cooldownMs){
+      // ✅ ONSET ERKANNT – sofort Pitch-Fenster öffnen
+      this._onsetMs     = now;
+      this._onsetActive = true;
+      this._pitchBuf    = [];
+      dbg('>>> ONSET <<<');
     }
 
-    // Erst auslösen wenn Note stabil genug (holdFrames Frames hintereinander)
-    const needed = holdFrames || 3;
-    const now=Date.now();
-    if(this._holdCount >= needed){
-      // Nicht nochmal auslösen wenn gerade dieselbe Note lief (außer nach Pause)
-      const sameNote = midi===this._lastFired;
-      const timeSinceLast = now-this._lastFiredMs;
-      const retriggerable = timeSinceLast > 500; // nach 500ms Pause darf dieselbe Note nochmal
+    // ── 3. Im Onset-Fenster: Pitch sammeln (erste 120ms nach Onset) ──
+    if(this._onsetActive){
+      const elapsed = now - this._onsetMs;
 
-      if(!sameNote || retriggerable){
-        this._lastFired=midi;
-        this._lastFiredMs=now;
-        this._candidate=-1;   // Reset damit nächste Note frisch erkannt wird
-        this._holdCount=0;
-        if(this.onNote)this.onNote(midi);
+      if(elapsed < 120){
+        // Pitch mit großem Buffer messen – sehr genau
+        this.anP.getFloatTimeDomainData(this.tbufP);
+        const {freq, confidence} = this._mpm(this.tbufP, this.actx.sampleRate);
+        if(freq>27.5 && freq<4200 && confidence>(pitchConf||0.35)){
+          const midi = Math.round(12*Math.log2(freq/440)+69);
+          if(midi>=36 && midi<=96) this._pitchBuf.push(midi);
+          dbg(`  pitch: ${midi} conf:${confidence.toFixed(3)}`);
+        }
+      } else {
+        // Fenster geschlossen – Mehrheitsentscheid über gesammelte Pitch-Werte
+        this._onsetActive = false;
+        if(this._pitchBuf.length >= (holdFrames||2)){
+          // Häufigste Note im Fenster nehmen (Median-Voting)
+          const counts = {};
+          for(const m of this._pitchBuf) counts[m]=(counts[m]||0)+1;
+          let best=-1, bestC=0;
+          for(const[m,c] of Object.entries(counts)) if(c>bestC){bestC=c;best=Number(m);}
+          if(best>0){
+            dbg(`  FIRED: ${best} (${bestC}/${this._pitchBuf.length} Stimmen)`);
+            this._lastFired  = best;
+            this._lastFiredMs= now;
+            if(this.onNote) this.onNote(best);
+          }
+        } else {
+          dbg(`  Onset verworfen (nur ${this._pitchBuf.length} Pitch-Frames)`);
+        }
+        this._pitchBuf=[];
       }
     }
 
