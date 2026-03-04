@@ -570,19 +570,29 @@ function startLesson(ci,li){
   currentCourseIdx=ci;currentLessonIdx=li;currentLesson=CURRICULUM[ci].lessons[li];
   document.getElementById('ex-title').textContent=currentLesson.title;
   showScreen('exercise-screen');
+
+  // Fully reset lesson-area to clean state (undo any lessonComplete() DOM changes)
+  const area=document.getElementById('lesson-area');
+  area.style.cssText=''; // clear ALL inline styles set by lessonComplete
+  const nd=document.querySelector('.lesson-note-display');if(nd)nd.style.cssText='';
+  const lf=document.getElementById('lesson-feedback');if(lf)lf.style.cssText='';
+
   if(currentLesson.type==='lesson'){
     currentMode='lesson';
-    document.getElementById('lesson-area').classList.remove('hidden');
+    area.classList.remove('hidden');
+    area.style.display=''; // ensure visible
     document.getElementById('song-area').classList.add('hidden');
-    // Wait for layout before measuring canvas/piano
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
       positionBlackKeys();
       initLessonMode();
     }));
   } else {
     currentMode='song';
+    area.classList.add('hidden');
+    area.style.display='none'; // force hidden with inline style too
     document.getElementById('song-area').classList.remove('hidden');
-    document.getElementById('lesson-area').classList.add('hidden');
+    // Reset stats bar for song mode
+    lScore=0;lStreak=0;lHits=0;lTotal=0;updateLessonUI(false);
     const sd=SONGS_DB[currentLesson.song]||importedSongs.find(s=>s.key===currentLesson.song);
     if(sd){
       songNotes=sd.notes;
@@ -981,7 +991,7 @@ function handleSongNote(midi){
   streak=0;total++;showFb('✗ Falsch',false);setKey(midi,'miss');setTimeout(()=>setKey(midi,null),320);updateUI();
 }
 function updateUI(){
-  // Unified stats bar shared between lesson and song mode
+  // Song-mode stats → same unified bar as lesson mode
   document.getElementById('ls-score').textContent=score;
   document.getElementById('ls-streak').textContent=streak;
   document.getElementById('ls-acc').textContent=total>0?Math.round(hits/total*100)+'%':'–';
